@@ -5,14 +5,14 @@ import java.util.*;
 public class Opcion2SimulacionEjecucion {
 
     // Cambiado para recibir n y tp y así imprimirlos en la tabla final
-    public static void simularEjecucion(int numProcesos, int totalMarcos, String politica, int n, int tp) {
+    public static void simularEjecucion(int numProcesos, int totalMarcos, String politica, int n, int tp, String nombreArchivo) {
         List<Proceso> procesos = new ArrayList<>();
         int marcosPorProceso = totalMarcos / numProcesos;
 
         for (int i = 0; i < numProcesos; i++) {
             Proceso p = new Proceso(i, marcosPorProceso);
-            // El ID del proceso en el archivo suele ser 1
-            p.leerArchivoConfiguracion("referencias_procs/proc" + (i + 1) + ".txt");
+            // Leer el archivo de referencias correcto para la combinación
+            p.leerArchivoConfiguracion("referencias_procs/" + nombreArchivo);
             for (int j = 0; j < marcosPorProceso; j++) {
                 p.asignarMarco(i * marcosPorProceso + j);
             }
@@ -81,6 +81,7 @@ public class Opcion2SimulacionEjecucion {
                 return false;
             }
 
+
             int marcoLibre = -1;
             for (int m : p.getMarcosAsignados()) {
                 if (!p.getTablaPaginas().containsValue(m)) {
@@ -92,6 +93,8 @@ public class Opcion2SimulacionEjecucion {
             if (marcoLibre == -1) {
                 if (pol.equalsIgnoreCase("LRU")) {
                     marcoLibre = buscarLRU(p, tiempos);
+                } else if (pol.equalsIgnoreCase("FIFOModified")) {
+                    marcoLibre = buscarFIFOModified(p, pagV);
                 } else {
                     marcoLibre = buscarFIFO(p);
                 }
@@ -112,6 +115,33 @@ public class Opcion2SimulacionEjecucion {
         }
     }
 
+    // FIFO modificado: cuando una página es referenciada, se mueve al final de la cola de reemplazo
+    private static int buscarFIFOModified(Proceso p, int paginaNueva) {
+        // Si la página ya está en memoria, mueve su marco al final (uso reciente)
+        Integer marcoExistente = null;
+        for (Map.Entry<Integer, Integer> entry : p.getTablaPaginas().entrySet()) {
+            if (entry.getKey() == paginaNueva) {
+                marcoExistente = entry.getValue();
+                break;
+            }
+        }
+        if (marcoExistente != null && p.getMarcosAsignados().contains(marcoExistente)) {
+            p.getMarcosAsignados().remove(marcoExistente);
+            p.getMarcosAsignados().add(marcoExistente);
+            return marcoExistente;
+        }
+        // Si no está, aplica FIFO clásico
+        if (!p.getMarcosAsignados().isEmpty()) {
+            int marco = p.getMarcosAsignados().get(0);
+            p.getMarcosAsignados().remove(0);
+            p.getMarcosAsignados().add(marco);
+            return marco;
+        }
+        // Fallback: si no hay marcos, retorna -1 (debería ser imposible)
+        return -1;
+    }
+
+    // FIFO clásico: reemplaza el marco más antiguo
     private static int buscarFIFO(Proceso p) {
         int marco = p.getMarcosAsignados().get(0);
         p.getMarcosAsignados().remove(0);
@@ -119,10 +149,10 @@ public class Opcion2SimulacionEjecucion {
         return marco;
     }
 
+    // LRU: reemplaza el marco menos recientemente usado
     private static int buscarLRU(Proceso p, Map<Integer, Long> tiempos) {
         int marcoElegido = -1;
         long minTiempo = Long.MAX_VALUE;
-
         for (int marco : p.getMarcosAsignados()) {
             long t = tiempos.getOrDefault(marco, 0L);
             if (t < minTiempo) {

@@ -3,9 +3,9 @@ package ClasesOpcionesEjecucion;
 import java.io.*;
 
 public class Opcion1GeneradorReferencias {
-    public static void generarReferencia(int numProc, int tp, int nf1, int nc1, int nf2, int nc2) {
+    public static void generarReferencia(int numProc, int tp, int nf1, int nc1, int nf2, int nc2, String nombreArchivo) {
         try {
-            String path = "./referencias_procs/proc" + numProc + ".txt";
+            String path = "./referencias_procs/" + nombreArchivo;
             File dir = new File("./referencias_procs/");
             if (!dir.exists())
                 dir.mkdirs();
