@@ -15,7 +15,7 @@ public class Proceso {
     private int fallosPagina = 0;
     private int accesosSwap = 0;
     private int totalReferencias = 0;
-    //Lo agrupo para no tener tantas líneas de código :p
+    // Lo agrupo para no tener tantas líneas de código :p
     private int TP, NF, NC, NR, NP;
 
     public Proceso(int id, int marcosPorProceso) {
@@ -47,7 +47,8 @@ public class Proceso {
             referencias.clear();
             while (sc.hasNextLine()) {
                 String linea = sc.nextLine().trim();
-                if (!linea.isEmpty()) referencias.add(linea);
+                if (!linea.isEmpty())
+                    referencias.add(linea);
             }
             sc.close();
         } catch (FileNotFoundException e) {
@@ -59,26 +60,84 @@ public class Proceso {
         }
     }
 
-        public Map<Integer, Integer> getTablaPaginas() { return tablaPaginas; }
-        public List<Integer> getMarcosAsignados() { return marcosAsignados; }
-        public int getHits() { return hits; }
-        public int getFallosPagina() { return fallosPagina; }
-        public int getAccesosSwap() { return accesosSwap; }
-        public int getTotalReferencias() { return totalReferencias; }
-        public int getIndiceActual() { return indiceActual; }
-        public void avanzarReferencia() { indiceActual++; }
-        public int getId() { return id; }
-        public List<String> getReferencias() { return referencias; }
+    public Map<Integer, Integer> getTablaPaginas() {
+        return tablaPaginas;
+    }
 
-        public void asignarMarco(int m) { marcosAsignados.add(m); }
-        public void liberarMarcos() { marcosAsignados.clear(); }
-        public void incrementarAccesosSwap() {accesosSwap++;}
+    public List<Integer> getMarcosAsignados() {
+        return marcosAsignados;
+    }
 
-        public void registrarHit() { hits++; totalReferencias++; }
-        public void registrarFallo(boolean requiereSwap) {
-            fallosPagina++; totalReferencias++;
-            if (requiereSwap) accesosSwap++;
+    public int getHits() {
+        return hits;
+    }
+
+    public int getFallosPagina() {
+        return fallosPagina;
+    }
+
+    public int getAccesosSwap() {
+        return accesosSwap;
+    }
+
+    public int getTotalReferencias() {
+        return totalReferencias;
+    }
+
+    public int getIndiceActual() {
+        return indiceActual;
+    }
+
+    public void avanzarReferencia() {
+        indiceActual++;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public List<String> getReferencias() {
+        return referencias;
+    }
+
+    public void asignarMarco(int m) {
+        marcosAsignados.add(m);
+    }
+
+    public void liberarMarcos() {
+        marcosAsignados.clear();
+    }
+
+    public void incrementarAccesosSwap() {
+        accesosSwap++;
+    }
+
+    public void registrarHit() {
+        hits++;
+        totalReferencias++;
+    }
+
+    public void registrarFallo(boolean requiereSwap) {
+        fallosPagina++;
+        totalReferencias++;
+        if (requiereSwap)
+            accesosSwap++;
+    }
+
+    public boolean terminado() {
+        return indiceActual >= referencias.size();
+    }
+
+    public void removerPaginaPorMarco(int marco) {
+        Integer paginaAEliminar = null;
+        for (Map.Entry<Integer, Integer> entry : this.tablaPaginas.entrySet()) {
+            if (entry.getValue() == marco) {
+                paginaAEliminar = entry.getKey();
+                break;
+            }
         }
-
-        public boolean terminado() { return indiceActual >= referencias.size(); }
+        if (paginaAEliminar != null) {
+            this.tablaPaginas.remove(paginaAEliminar);
+        }
+    }
 }

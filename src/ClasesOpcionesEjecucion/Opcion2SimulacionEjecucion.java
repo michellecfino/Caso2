@@ -4,174 +4,132 @@ import java.util.*;
 
 public class Opcion2SimulacionEjecucion {
 
-public static void simularEjecucion(int numProcesos, int totalMarcos) {
+    // Cambiado para recibir n y tp y así imprimirlos en la tabla final
+    public static void simularEjecucion(int numProcesos, int totalMarcos, String politica, int n, int tp) {
+        List<Proceso> procesos = new ArrayList<>();
+        int marcosPorProceso = totalMarcos / numProcesos;
 
-    if (totalMarcos % numProcesos != 0) {
-        System.err.println("Error: El número de marcos debe ser múltiplo del número de procesos");
-        return;
-    }
-
-    List<Proceso> procesos = new ArrayList<>();
-    int marcosPorProceso = totalMarcos / numProcesos;
-
-    for (int i = 0; i < numProcesos; i++) {
-        Proceso p = new Proceso(i, marcosPorProceso);
-        p.leerArchivoConfiguracion("referencias_procs/proc" + (i + 1) + ".txt");
-        for (int j = 0; j < marcosPorProceso; j++) {
-            p.asignarMarco(i * marcosPorProceso + j);
-            System.out.println("Proceso " + i + ": recibe marco " + (i * marcosPorProceso + j));
+        for (int i = 0; i < numProcesos; i++) {
+            Proceso p = new Proceso(i, marcosPorProceso);
+            // El ID del proceso en el archivo suele ser 1
+            p.leerArchivoConfiguracion("referencias_procs/proc" + (i + 1) + ".txt");
+            for (int j = 0; j < marcosPorProceso; j++) {
+                p.asignarMarco(i * marcosPorProceso + j);
+            }
+            procesos.add(p);
         }
-        procesos.add(p);
-    }
 
-        Map<Integer, Integer> marcosProceso = new HashMap<>();
-        Map<Integer, Long> ultimoAccesoMarco = new HashMap<>();
-        for (int i = 0; i < totalMarcos; i++) {
-            marcosProceso.put(i, -1);
-            ultimoAccesoMarco.put(i, -1L);
+        Map<Integer, Long> tiemposAcceso = new HashMap<>();
+
+        simularColas(procesos, tiemposAcceso, totalMarcos, politica);
+
+        // IMPRESIÓN FORMATO EXCEL
+        for (Proceso p : procesos) {
+            double tasaFallas = (double) p.getFallosPagina() / p.getTotalReferencias();
+            // Formato: Matriz;Pagina;Marcos;Politica;Fallas;Hits;TasaFallas
+            System.out.println(n + "x" + n + ";" + tp + ";" + totalMarcos + ";" + politica + ";" +
+                    p.getFallosPagina() + ";" + p.getHits() + ";" + String.format("%.4f", tasaFallas));
         }
-        simularColasProcesos(procesos, marcosProceso, ultimoAccesoMarco, totalMarcos);
-
-        mostrarEstadisticas(procesos);
     }
 
-
-    private static void simularColasProcesos(List<Proceso> procesos, Map<Integer, Integer> mapaMarcos, Map<Integer, Long> tiempoUltimoUsoMarco, int totalMarcos) {
+    private static void simularColas(List<Proceso> procesos, Map<Integer, Long> tiempos, int totalMarcos,
+            String politica) {
         Queue<Proceso> colaListos = new LinkedList<>(procesos);
         Queue<Proceso> colaDisco = new LinkedList<>();
-        long tiempo = 0;
+        long globalTime = 0;
 
         while (!colaListos.isEmpty() || !colaDisco.isEmpty()) {
-
             Proceso p = !colaListos.isEmpty() ? colaListos.poll() : colaDisco.poll();
-
-            if (p.terminado()) {
-                System.out.println("========================");
-                System.out.println("Termino proc: " + p.getId());
-                System.out.println("========================");
-                Set<Integer> marcosLiberados = new HashSet<>(p.getMarcosAsignados());
-                for (int m : marcosLiberados)
-                    System.out.println("PROC " + p.getId() + " removiendo marco: " + m);
-                p.liberarMarcos();
-
-                Proceso candidato = null;
-                for (Proceso q : procesos)
-                    if (!q.terminado())
-                        if (candidato == null || q.getFallosPagina() > candidato.getFallosPagina())
-                            candidato = q;
-
-                if (candidato != null) {
-                    for (int m : marcosLiberados) {
-                        candidato.asignarMarco(m);
-                        System.out.println("PROC " + candidato.getId() + " asignando marco nuevo " + m);
-                    }
-                }
+            if (p.terminado())
                 continue;
+
+            String ref = p.getReferencias().get(p.getIndiceActual());
+
+            if (ref == null || !ref.contains(",")) {
+                p.avanzarReferencia();
+                colaListos.add(p);
             }
 
-            int lineaActual = p.getIndiceActual();
-            String referencia = p.getReferencias().get(lineaActual);
-
-            System.out.println("Turno proc: " + p.getId());
-            System.out.println("PROC " + p.getId() + " analizando linea_: " + lineaActual);
-
-            boolean falloPagina = procesarReferencia(p, referencia, mapaMarcos, tiempoUltimoUsoMarco, tiempo, totalMarcos);
-
-            if (!falloPagina)
-                System.out.println("PROC " + p.getId() + " hits: " + p.getHits());
-            else
-                System.out.println("PROC " + p.getId() + " falla de pag: " + p.getFallosPagina());
-
-            System.out.println("PROC " + p.getId() + " envejecimiento");
+            boolean fallo = procesarPeticion(p, ref, tiempos, globalTime, politica);
 
             p.avanzarReferencia();
-            if (!falloPagina)
-                colaListos.add(p);
-            else
+            if (fallo)
                 colaDisco.add(p);
+            else
+                colaListos.add(p);
 
-            tiempo++;
+            globalTime++;
         }
     }
 
-    private static boolean procesarReferencia(Proceso p, String referencia, Map<Integer, Integer> marcosProceso, Map<Integer, Long> ultimoAccesoMarco, long tiempo, int totalMarcos) {
-
-        String[] partes = referencia.split(",");
-        int paginaVirtual = Integer.parseInt(partes[1]);
-
-        if (p.getTablaPaginas().containsKey(paginaVirtual)) {
-            int marco = p.getTablaPaginas().get(paginaVirtual);
-            ultimoAccesoMarco.put(marco, tiempo);
-            p.registrarHit(); 
-            return false; 
+    private static boolean procesarPeticion(Proceso p, String ref, Map<Integer, Long> tiempos, long t, String pol) {
+        // 1. Validar que la línea sea válida (debe tener una coma)
+        if (ref == null || !ref.contains(",")) {
+            return false; // Ignorar líneas inválidas o vacías
         }
 
-        boolean reemplazo = false;
-        int marcoAsignar = -1;
+        try {
+            // 2. Intentar extraer la página virtual
+            String[] partes = ref.split(",");
+            int pagV = Integer.parseInt(partes[1].trim());
+
+            // --- El resto del algoritmo sigue igual ---
+            if (p.getTablaPaginas().containsKey(pagV)) {
+                int marco = p.getTablaPaginas().get(pagV);
+                tiempos.put(marco, t);
+                p.registrarHit();
+                return false;
+            }
+
+            int marcoLibre = -1;
+            for (int m : p.getMarcosAsignados()) {
+                if (!p.getTablaPaginas().containsValue(m)) {
+                    marcoLibre = m;
+                    break;
+                }
+            }
+
+            if (marcoLibre == -1) {
+                if (pol.equalsIgnoreCase("LRU")) {
+                    marcoLibre = buscarLRU(p, tiempos);
+                } else {
+                    marcoLibre = buscarFIFO(p);
+                }
+                p.removerPaginaPorMarco(marcoLibre);
+                p.registrarFallo(true);
+            } else {
+                p.registrarFallo(false);
+            }
+
+            p.getTablaPaginas().put(pagV, marcoLibre);
+            tiempos.put(marcoLibre, t);
+            p.incrementarAccesosSwap();
+            return true;
+
+        } catch (Exception e) {
+            // Si algo sale mal parseando un número, simplemente lo ignoramos
+            return false;
+        }
+    }
+
+    private static int buscarFIFO(Proceso p) {
+        int marco = p.getMarcosAsignados().get(0);
+        p.getMarcosAsignados().remove(0);
+        p.getMarcosAsignados().add(marco);
+        return marco;
+    }
+
+    private static int buscarLRU(Proceso p, Map<Integer, Long> tiempos) {
+        int marcoElegido = -1;
+        long minTiempo = Long.MAX_VALUE;
 
         for (int marco : p.getMarcosAsignados()) {
-            if (!p.getTablaPaginas().containsValue(marco)) {
-                marcoAsignar = marco;
-                break;
+            long t = tiempos.getOrDefault(marco, 0L);
+            if (t < minTiempo) {
+                minTiempo = t;
+                marcoElegido = marco;
             }
         }
-
-        if (marcoAsignar == -1) {
-            marcoAsignar = encontrarMarcoLRU(p, marcosProceso, ultimoAccesoMarco);
-            int paginaVieja = obtenerPaginaPorMarco(p.getTablaPaginas(), marcoAsignar);
-            if (paginaVieja != -1) {
-                p.getTablaPaginas().remove(paginaVieja);
-                p.incrementarAccesosSwap(); 
-            }
-            reemplazo = true;
-        } else {
-             p.incrementarAccesosSwap();
-        }
-
-        p.registrarFallo(reemplazo);
-        marcosProceso.put(marcoAsignar, p.getId());
-        p.getTablaPaginas().put(paginaVirtual, marcoAsignar);
-        ultimoAccesoMarco.put(marcoAsignar, tiempo);
-
-        return true; 
+        return marcoElegido;
     }
-
-
-
-    private static int encontrarMarcoLRU(Proceso p, Map<Integer, Integer> marcosProceso,Map<Integer, Long> ultimoAccesoMarco) {
-        int marcoLRU = -1;
-        long menorTiempo = Long.MAX_VALUE;
-
-        for (int marco : p.getMarcosAsignados()) {
-            long t = ultimoAccesoMarco.getOrDefault(marco, -1L);
-            if (t < menorTiempo) {
-                menorTiempo = t;
-                marcoLRU = marco;
-            }
-        }
-        return marcoLRU;
-    }
-
-    private static int obtenerPaginaPorMarco(Map<Integer, Integer> tabla, int marco) {
-        for (Map.Entry<Integer, Integer> e : tabla.entrySet()) {
-            if (e.getValue() == marco) return e.getKey();
-        }
-        return -1;
-    }
-
-    private static void mostrarEstadisticas(List<Proceso> procesos) {
-        System.out.println("\n=== ESTADÍSTICAS FINALES ===");
-        for (Proceso p : procesos) {
-            double tasaFallos = (double) p.getFallosPagina() / p.getTotalReferencias();
-            double tasaExito = (double) p.getHits() / p.getTotalReferencias();
-            System.out.println("\nProceso " + p.getId() + ":");
-            System.out.println("  Num referencias: " + p.getTotalReferencias());
-            System.out.println("  Fallas: " + p.getFallosPagina());
-            System.out.println("  Hits: " + p.getHits());
-            System.out.println("  SWAP: " + p.getAccesosSwap());
-            System.out.printf("  Tasa fallas: %.4f\n", tasaFallos);
-            System.out.printf("  Tasa éxito: %.4f\n", tasaExito);
-        }
-    }
-
 }
