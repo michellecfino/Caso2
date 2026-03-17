@@ -4,14 +4,14 @@ import java.util.*;
 
 public class Opcion2SimulacionEjecucion {
 
-    // Cambiado para recibir n y tp y así imprimirlos en la tabla final
-    public static void simularEjecucion(int numProcesos, int totalMarcos, String politica, int n, int tp, String nombreArchivo) {
+    public static void simularEjecucion(int numProcesos, int totalMarcos, String politica, int n, int tp,
+            String nombreArchivo) {
         List<Proceso> procesos = new ArrayList<>();
         int marcosPorProceso = totalMarcos / numProcesos;
 
         for (int i = 0; i < numProcesos; i++) {
             Proceso p = new Proceso(i, marcosPorProceso);
-            // Leer el archivo de referencias correcto para la combinación
+
             p.leerArchivoConfiguracion("referencias_procs/" + nombreArchivo);
             for (int j = 0; j < marcosPorProceso; j++) {
                 p.asignarMarco(i * marcosPorProceso + j);
@@ -23,10 +23,9 @@ public class Opcion2SimulacionEjecucion {
 
         simularColas(procesos, tiemposAcceso, totalMarcos, politica);
 
-        // IMPRESIÓN FORMATO EXCEL
         for (Proceso p : procesos) {
             double tasaFallas = (double) p.getFallosPagina() / p.getTotalReferencias();
-            // Formato: Matriz;Pagina;Marcos;Politica;Fallas;Hits;TasaFallas
+
             System.out.println(n + "x" + n + ";" + tp + ";" + totalMarcos + ";" + politica + ";" +
                     p.getFallosPagina() + ";" + p.getHits() + ";" + String.format("%.4f", tasaFallas));
         }
@@ -63,24 +62,24 @@ public class Opcion2SimulacionEjecucion {
     }
 
     private static boolean procesarPeticion(Proceso p, String ref, Map<Integer, Long> tiempos, long t, String pol) {
-        // 1. Validar que la línea sea válida (debe tener una coma)
-        if (ref == null || !ref.contains(",")) {
-            return false; // Ignorar líneas inválidas o vacías
-        }
+        if (ref == null || !ref.contains(","))
+            return false;
 
         try {
-            // 2. Intentar extraer la página virtual
             String[] partes = ref.split(",");
             int pagV = Integer.parseInt(partes[1].trim());
 
-            // --- El resto del algoritmo sigue igual ---
             if (p.getTablaPaginas().containsKey(pagV)) {
                 int marco = p.getTablaPaginas().get(pagV);
                 tiempos.put(marco, t);
                 p.registrarHit();
+
+                if (pol.equalsIgnoreCase("FIFOModified")) {
+                    p.getMarcosAsignados().remove((Integer) marco);
+                    p.getMarcosAsignados().add(marco);
+                }
                 return false;
             }
-
 
             int marcoLibre = -1;
             for (int m : p.getMarcosAsignados()) {
@@ -102,20 +101,23 @@ public class Opcion2SimulacionEjecucion {
                 p.registrarFallo(true);
             } else {
                 p.registrarFallo(false);
+                if (pol.startsWith("FIFO")) {
+                    p.getMarcosAsignados().remove((Integer) marcoLibre);
+                    p.getMarcosAsignados().add(marcoLibre);
+                }
             }
 
             p.getTablaPaginas().put(pagV, marcoLibre);
             tiempos.put(marcoLibre, t);
-            p.incrementarAccesosSwap();
             return true;
 
         } catch (Exception e) {
-            // Si algo sale mal parseando un número, simplemente lo ignoramos
             return false;
         }
     }
 
-    // FIFO modificado: cuando una página es referenciada, se mueve al final de la cola de reemplazo
+    // FIFO modificado: cuando una página es referenciada, se mueve al final de la
+    // cola de reemplazo
     private static int buscarFIFOModified(Proceso p, int paginaNueva) {
         // Si la página ya está en memoria, mueve su marco al final (uso reciente)
         Integer marcoExistente = null;
